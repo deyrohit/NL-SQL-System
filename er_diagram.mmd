@@ -1,0 +1,219 @@
+# ClearQuote Database - ER Diagram
+
+## Entity-Relationship Diagram
+
+```mermaid
+erDiagram
+    VEHICLE_CARDS ||--o{ DAMAGE_DETECTIONS : "has"
+    VEHICLE_CARDS ||--o{ REPAIRS : "has"
+    VEHICLE_CARDS ||--o{ QUOTES : "has"
+    
+    VEHICLE_CARDS {
+        INTEGER card_id PK "Primary Key"
+        VARCHAR vehicle_type "Car, Truck, SUV, Van, Motorcycle"
+        VARCHAR manufacturer "Toyota, Honda, Maruti, etc."
+        VARCHAR model "Fortuner, Camry, Verna, etc."
+        INTEGER manufacture_year "Year of manufacture"
+        DATE created_at "Record creation date"
+    }
+    
+    DAMAGE_DETECTIONS {
+        INTEGER damage_id PK "Primary Key"
+        INTEGER card_id FK "Foreign Key to vehicle_cards"
+        VARCHAR panel_name "front_bumper, rear_bumper, door_left, etc."
+        VARCHAR damage_type "scratch, dent, crack, broken, paint_damage"
+        VARCHAR severity "minor, moderate, severe, critical"
+        DECIMAL confidence "AI confidence score (0-1)"
+        DATE detected_at "Damage detection date"
+    }
+    
+    REPAIRS {
+        INTEGER repair_id PK "Primary Key"
+        INTEGER card_id FK "Foreign Key to vehicle_cards"
+        VARCHAR panel_name "Panel being repaired"
+        VARCHAR repair_action "paint, replace, repair, polish, dent_removal"
+        DECIMAL repair_cost "Cost in INR"
+        BOOLEAN approved "Approval status"
+        DATE created_at "Repair record date"
+    }
+    
+    QUOTES {
+        INTEGER quote_id PK "Primary Key"
+        INTEGER card_id FK "Foreign Key to vehicle_cards"
+        DECIMAL total_estimated_cost "Total quote amount"
+        VARCHAR currency "INR, USD, etc."
+        DATE generated_at "Quote generation date"
+    }
+```
+
+## Detailed Entity Descriptions
+
+### 1. **VEHICLE_CARDS** (Parent Entity)
+**Purpose**: Stores vehicle information and metadata
+
+| Attribute | Type | Constraints | Description |
+|-----------|------|-------------|-------------|
+| `card_id` | INTEGER | PRIMARY KEY | Unique vehicle card identifier |
+| `vehicle_type` | VARCHAR(50) | NOT NULL | Type: Car, Truck, SUV, Van, Motorcycle |
+| `manufacturer` | VARCHAR(100) | NOT NULL | Vehicle manufacturer (e.g., Toyota, Honda) |
+| `model` | VARCHAR(100) | NOT NULL | Vehicle model (e.g., Fortuner, Camry) |
+| `manufacture_year` | INTEGER | NOT NULL, CHECK | Year between 1900 and current year + 1 |
+| `created_at` | DATE | NOT NULL | Record creation timestamp |
+
+**Indexes**: created_at, manufacturer, model, vehicle_type, manufacture_year
+
+---
+
+### 2. **DAMAGE_DETECTIONS** (Child Entity)
+**Purpose**: Stores AI-detected damages on vehicle panels
+
+| Attribute | Type | Constraints | Description |
+|-----------|------|-------------|-------------|
+| `damage_id` | INTEGER | PRIMARY KEY | Unique damage detection ID |
+| `card_id` | INTEGER | FOREIGN KEY, NOT NULL | References vehicle_cards(card_id) |
+| `panel_name` | VARCHAR(100) | NOT NULL | Panel identifier (e.g., front_bumper, rear_bumper) |
+| `damage_type` | VARCHAR(50) | NOT NULL | Type: scratch, dent, crack, broken, paint_damage |
+| `severity` | VARCHAR(20) | NOT NULL | Severity: minor, moderate, severe, critical |
+| `confidence` | DECIMAL(5,4) | CHECK (0-1) | AI detection confidence score |
+| `detected_at` | DATE | NOT NULL | Damage detection timestamp |
+
+**Foreign Key**: `card_id` → `VEHICLE_CARDS.card_id` (ON DELETE CASCADE)
+
+**Indexes**: card_id, panel_name, damage_type, severity, detected_at
+
+---
+
+### 3. **REPAIRS** (Child Entity)
+**Purpose**: Stores repair actions and costs
+
+| Attribute | Type | Constraints | Description |
+|-----------|------|-------------|-------------|
+| `repair_id` | INTEGER | PRIMARY KEY | Unique repair ID |
+| `card_id` | INTEGER | FOREIGN KEY, NOT NULL | References vehicle_cards(card_id) |
+| `panel_name` | VARCHAR(100) | NOT NULL | Panel being repaired |
+| `repair_action` | VARCHAR(50) | NOT NULL | Action: paint, replace, repair, polish, dent_removal |
+| `repair_cost` | DECIMAL(10,2) | NOT NULL, CHECK (≥0) | Cost in currency |
+| `approved` | BOOLEAN | NOT NULL, DEFAULT FALSE | Approval status |
+| `created_at` | DATE | NOT NULL | Repair record timestamp |
+
+**Foreign Key**: `card_id` → `VEHICLE_CARDS.card_id` (ON DELETE CASCADE)
+
+**Indexes**: card_id, panel_name, created_at, approved, repair_cost
+
+---
+
+### 4. **QUOTES** (Child Entity)
+**Purpose**: Stores generated repair quotes for vehicles
+
+| Attribute | Type | Constraints | Description |
+|-----------|------|-------------|-------------|
+| `quote_id` | INTEGER | PRIMARY KEY | Unique quote ID |
+| `card_id` | INTEGER | FOREIGN KEY, NOT NULL | References vehicle_cards(card_id) |
+| `total_estimated_cost` | DECIMAL(10,2) | NOT NULL, CHECK (≥0) | Total estimated repair cost |
+| `currency` | VARCHAR(3) | NOT NULL, DEFAULT 'INR' | Currency code (INR, USD, etc.) |
+| `generated_at` | DATE | NOT NULL | Quote generation timestamp |
+
+**Foreign Key**: `card_id` → `VEHICLE_CARDS.card_id` (ON DELETE CASCADE)
+
+**Indexes**: card_id, generated_at, total_estimated_cost
+
+---
+
+## Relationships
+
+```mermaid
+graph LR
+    A[VEHICLE_CARDS<br/>1] -->|1:N| B[DAMAGE_DETECTIONS<br/>N]
+    A -->|1:N| C[REPAIRS<br/>N]
+    A -->|1:N| D[QUOTES<br/>N]
+    
+    style A fill:#4CAF50,color:#fff
+    style B fill:#2196F3,color:#fff
+    style C fill:#FF9800,color:#fff
+    style D fill:#9C27B0,color:#fff
+```
+
+### Relationship Details
+
+1. **VEHICLE_CARDS ↔ DAMAGE_DETECTIONS**
+   - **Type**: One-to-Many (1:N)
+   - **Cardinality**: One vehicle can have multiple damages
+   - **Delete Rule**: CASCADE (deleting vehicle deletes all its damages)
+
+2. **VEHICLE_CARDS ↔ REPAIRS**
+   - **Type**: One-to-Many (1:N)
+   - **Cardinality**: One vehicle can have multiple repairs
+   - **Delete Rule**: CASCADE (deleting vehicle deletes all its repairs)
+
+3. **VEHICLE_CARDS ↔ QUOTES**
+   - **Type**: One-to-Many (1:N)
+   - **Cardinality**: One vehicle can have multiple quotes
+   - **Delete Rule**: CASCADE (deleting vehicle deletes all its quotes)
+
+---
+
+## Database Views (Derived Entities)
+
+The schema includes three useful views for common queries:
+
+### 1. **v_recent_damages**
+Combines vehicle info with damage detections
+```sql
+SELECT vehicle_cards.*, damage_detections.*
+FROM vehicle_cards
+JOIN damage_detections ON vehicle_cards.card_id = damage_detections.card_id
+```
+
+### 2. **v_repair_costs_summary**
+Aggregates repair costs by vehicle
+```sql
+SELECT card_id, manufacturer, model,
+       COUNT(repairs) as total_repairs,
+       SUM(repair_cost) as total_cost,
+       AVG(repair_cost) as avg_cost
+FROM vehicle_cards LEFT JOIN repairs
+GROUP BY card_id
+```
+
+### 3. **v_damage_repair_analysis**
+Correlates damages with repairs
+```sql
+SELECT card_id, manufacturer, model,
+       COUNT(damages) as total_damages,
+       COUNT(repairs) as total_repairs,
+       SUM(repair_cost) as total_cost
+FROM vehicle_cards
+LEFT JOIN damage_detections
+LEFT JOIN repairs
+GROUP BY card_id
+```
+
+---
+
+## Sample Data Statistics
+
+| Table | Record Count |
+|-------|--------------|
+| vehicle_cards | 100 records |
+| damage_detections | 211 records |
+| repairs | 91 records |
+| quotes | 100 records |
+
+---
+
+## Key Constraints & Business Rules
+
+1. **Referential Integrity**: All child tables have CASCADE delete constraints
+2. **Data Validation**:
+   - `manufacture_year`: Must be between 1900 and current_year + 1
+   - `confidence`: Must be between 0 and 1
+   - `repair_cost`: Must be ≥ 0
+   - `total_estimated_cost`: Must be ≥ 0
+
+3. **Default Values**:
+   - `repairs.approved`: DEFAULT FALSE
+   - `quotes.currency`: DEFAULT 'INR'
+
+4. **Panel Name Normalization**: 
+   - Stored with underscores: `front_bumper`, `rear_bumper`
+   - Function `normalize_panel_name()` handles variations

@@ -1,0 +1,171 @@
+# ClearQuote NL→SQL System - Project Flowchart
+
+## System Architecture Flow
+
+```mermaid
+graph TB
+    A[User] -->|Natural Language Query| B[API Layer]
+    B --> C[NL→SQL Converter]
+    C -->|Uses| D[Groq LLM API]
+    D -->|Returns JSON| C
+    C --> E[SQL Validator]
+    E -->|Validates| F{Query Safe?}
+    F -->|No| G[Return Error]
+    F -->|Yes| H[Sanitize & Add LIMIT]
+    H --> I[Database Executor]
+    I -->|Executes SQL| J[(PostgreSQL Database)]
+    J -->|Returns Results| K[Answer Generator]
+    K -->|Uses| D
+    K -->|Natural Language Answer| L[Return to User]
+    G --> L
+    
+    style A fill:#e1f5ff
+    style D fill:#fff4e6
+    style J fill:#e8f5e9
+    style L fill:#f3e5f5
+```
+
+## Detailed Processing Pipeline
+
+```mermaid
+flowchart TD
+    Start([User Asks Question]) --> Input["Natural Language Query<br/>Example: 'Show damaged Toyota vehicles'"]
+    
+    Input --> NL2SQL[NL→SQL Converter]
+    
+    NL2SQL --> Schema[Load Database Schema]
+    Schema --> Context[Build Context with:<br/>- Table structures<br/>- Column types<br/>- Relationships<br/>- Current date]
+    
+    Context --> LLM[Send to Groq LLM<br/>Model: llama-3.3-70b-versatile]
+    LLM --> JSONResp[Receive JSON Response:<br/>- sql<br/>- explanation<br/>- assumptions<br/>- confidence]
+    
+    JSONResp --> Validate{SQL Validation}
+    
+    Validate -->|Contains DROP/DELETE| Reject1[Reject: Forbidden Operation]
+    Validate -->|Not SELECT query| Reject2[Reject: Must be SELECT]
+    Validate -->|SQL Injection Pattern| Reject3[Reject: Security Risk]
+    Validate -->|Valid| Sanitize[Add/Enforce LIMIT Clause]
+    
+    Reject1 --> Error([Return Error to User])
+    Reject2 --> Error
+    Reject3 --> Error
+    
+    Sanitize --> Execute[Execute SQL on PostgreSQL]
+    Execute -->|Query Error| DBError[Database Error]
+    DBError --> Error
+    
+    Execute -->|Success| Results[Fetch Results as JSON]
+    Results --> Count{Has Results?}
+    
+    Count -->|No Results| NoData[Generate 'No Results' Message]
+    Count -->|Has Results| Answer[Answer Generator]
+    
+    Answer --> AnswerLLM[Send to Groq LLM:<br/>- Original question<br/>- SQL query<br/>- Results data]
+    AnswerLLM --> NLAnswer[Generate Natural Language Answer]
+    
+    NLAnswer --> Response[Format Response:<br/>- Answer text<br/>- SQL query<br/>- Row count<br/>- Assumptions<br/>- Confidence score]
+    NoData --> Response
+    
+    Response --> Success([Return to User])
+    
+    style Start fill:#4CAF50,color:#fff
+    style Success fill:#4CAF50,color:#fff
+    style Error fill:#f44336,color:#fff
+    style LLM fill:#FF9800,color:#fff
+    style Execute fill:#2196F3,color:#fff
+    style Validate fill:#FFC107
+```
+
+## API Endpoint Flow
+
+```mermaid
+flowchart LR
+    subgraph API Endpoints
+        A[GET /health] --> A1[Health Check]
+        B[POST /api/query] --> B1[Process NL Query]
+        C[GET /api/schema] --> C1[Get DB Schema]
+        D[GET /api/examples] --> D1[Example Queries]
+        E[GET /api/stats] --> E1[Database Stats]
+    end
+    
+    B1 --> Pipeline[Main Processing Pipeline]
+    
+    style A fill:#4CAF50,color:#fff
+    style B fill:#2196F3,color:#fff
+    style C fill:#FF9800,color:#fff
+    style D fill:#9C27B0,color:#fff
+    style E fill:#00BCD4,color:#fff
+```
+
+## Safety Validation Layers
+
+```mermaid
+flowchart TD
+    SQL[Generated SQL Query] --> L1[Layer 1: Keyword Whitelist]
+    L1 --> L2[Layer 2: Forbidden Operations]
+    L2 --> L3[Layer 3: SELECT-only Check]
+    L3 --> L4[Layer 4: Multi-statement Check]
+    L4 --> L5[Layer 5: Injection Pattern Detection]
+    L5 --> L6[Layer 6: Limit Enforcement]
+    L6 --> Safe[Safe to Execute]
+    
+    L1 -.->|Fails| Block[Block Execution ]
+    L2 -.->|Fails| Block
+    L3 -.->|Fails| Block
+    L4 -.->|Fails| Block
+    L5 -.->|Fails| Block
+    
+    style Safe fill:#4CAF50,color:#fff
+    style Block fill:#f44336,color:#fff
+```
+
+## Key Components
+
+### 1. **DatabaseSchema Class**
+- Stores schema information for all tables
+- Provides context to LLM for SQL generation
+- Includes table structures, relationships, and constraints
+
+### 2. **SQLValidator Class**
+- **Whitelist**: Allowed SQL keywords (SELECT, JOIN, WHERE, etc.)
+- **Blacklist**: Forbidden operations (DROP, DELETE, INSERT, etc.)
+- **Injection Detection**: Patterns like `; DROP`, `--`, `/**/`
+- **Limit Enforcement**: Adds `LIMIT 1000` if missing
+
+### 3. **NLToSQLConverter Class**
+- Uses Groq API (llama-3.3-70b-versatile)
+- Converts natural language → SQL
+- Handles ambiguous terms ("back bumper" → "rear_bumper")
+- Returns structured JSON with confidence score
+
+### 4. **DatabaseExecutor Class**
+- Executes validated SQL on PostgreSQL
+- Uses parameterized queries
+- Returns results as JSON
+
+### 5. **AnswerGenerator Class**
+- Converts raw SQL results → natural language
+- Uses Groq LLM for human-friendly responses
+- Formats numbers, currencies appropriately
+
+---
+
+## Example Query Flow
+
+**Input**: "What is the average repair cost for rear bumper damages in last 30 days?"
+
+1. **NL→SQL**: 
+```sql
+SELECT AVG(r.repair_cost) as average_cost
+FROM repairs r
+JOIN damage_detections dd ON r.card_id = dd.card_id
+WHERE LOWER(dd.panel_name) LIKE '%rear%bumper%'
+AND r.created_at >= CURRENT_DATE - 30
+LIMIT 1000;
+```
+
+2. **Validation**: Safe (SELECT only, no forbidden keywords)
+
+3. **Execution**: Returns `[{average_cost: 8523.45}]`
+
+4. **Answer**: "The average repair cost for rear bumper damages in the last 30 days is ₹8,523.45."
