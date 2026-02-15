@@ -2,18 +2,21 @@
 
 ```mermaid
 flowchart TD
+
     %% =====================
-    %% 1️⃣ AUTHENTICATION
+    %% AUTHENTICATION
     %% =====================
 
     Login([Login])
         --> Role{Determine Role<br/>User or Admin?}
 
     %% =====================
-    %% 2️⃣ USER FLOW (STRICT READ-ONLY + NO SCHEMA ACCESS)
+    %% USER FLOW (WITH MEMORY)
     %% =====================
 
-    Role -->|User| UserModel[Model Generates SQL Query]
+    Role -->|User| UserMemory[ConversationBufferWindowMemory<br/>k = 5]
+
+    UserMemory --> UserModel[Model Generates SQL Query]
 
     UserModel --> UserSQL[Generated SQL Query]
 
@@ -45,7 +48,7 @@ flowchart TD
 
 
     %% =====================
-    %% 3️⃣ ADMIN FLOW
+    %% ADMIN FLOW (NO MEMORY)
     %% =====================
 
     Role -->|Admin| AdminModel[Model Generates SQL Query]
@@ -61,7 +64,7 @@ flowchart TD
 
 
     %% =====================
-    %% 4️⃣ EXECUTION LAYER
+    %% EXECUTION LAYER
     %% =====================
 
     UserSanitize --> ExecuteUser[Execute SQL on PostgreSQL]
@@ -78,7 +81,7 @@ flowchart TD
 
 
     %% =====================
-    %% 5️⃣ USER RESPONSE FLOW
+    %% USER RESPONSE FLOW
     %% =====================
 
     UserResults --> Count{Has Results?}
@@ -118,4 +121,7 @@ flowchart TD
     style EndAdmin fill:#4CAF50,color:#fff
     style AccessMsg fill:#f44336,color:#fff
     style ExecuteUser fill:#2196F3,color:#fff
+    style AdminExecute fill:#673AB7,color:#fff
+    style UserMemory fill:#FFC107,color:#000
+
 '''
